@@ -1,0 +1,126 @@
+/* 
+    SerialZumoSketch -- Adapted from the serial comms examples included with the Zumo32u4 library.
+    
+    Nicholi Shiell
+*/
+
+#include <Wire.h>
+#include <Zumo32U4.h>
+#include <string.h>
+
+/* Serial port baud rate */
+#define BAUDRATE     57600
+
+/* Variable initialization */
+
+Zumo32U4ButtonA buttonA;
+Zumo32U4Motors motors;
+LSM303 compass;
+
+String cmdString;
+
+bool robotOn = false;
+
+bool sendReportFlag = false;
+
+int counter = 0;
+
+char report[120];
+
+/* Run a command.  Commands are defined in commands.h */
+int runCommand() {
+
+  //const char * cmd = cmdString.c_str();
+  
+  char *cmd = new char[cmdString.length() + 1];
+  strcpy(cmd, cmdString.c_str());
+  
+  if(cmd[0] == 'F'){
+    motors.setSpeeds(50, 50);
+  }
+  else if(cmd[0] == 'B'){
+    motors.setSpeeds(-50, -50);
+  }
+  else if(cmd[0] == 'R'){
+    motors.setSpeeds(50, -50);
+    //Serial.println("Right!");
+  }
+  else if(cmd[0] == 'L'){
+    motors.setSpeeds(-50, 50);
+    //Serial.println("Left!");
+  } 
+  else if(cmd[0] == 'S'){
+    motors.setSpeeds(0, 0);
+    //Serial.println("Stop!");
+  }
+  else if(cmd[0] == 'T'){
+    sendReportFlag = true;
+  } 
+  else{
+    //Serial.println("Huh.");
+    motors.setSpeeds(0,0);    
+  }
+  
+  delete [] cmd;
+}
+
+void setup() {
+   Wire.begin();
+  Serial1.begin(BAUDRATE);
+    
+  if (!compass.init()){
+    // Failed to detect the compass.
+    ledRed(1);
+    while(1){
+      Serial1.println(F("Failed to detect the compass."));
+      delay(100);
+    }
+  }
+
+  compass.enableDefault();
+}
+
+void RobotOn(){
+  
+  counter++;
+  if(counter == 10){
+    sendReportFlag = true;
+    counter = 0;
+  }
+  
+  // available() returns the number of bytes available in the recieved buffer  
+  while (Serial1.available() > 0) {
+    // Read the next string
+    cmdString = Serial1.readString();
+    runCommand();     
+    //resetCommand();
+  
+    // Bounce back msgs
+    Serial1.println("Recieved Command: " + cmdString);
+  }
+  
+  if( sendReportFlag ){
+      snprintf_P(report, sizeof(report), PSTR("%i %6d %6d %6d"), robotOn, compass.m.x, compass.m.y, compass.m.z);
+      Serial1.println(report); 
+      sendReportFlag = false;
+  }
+   
+}
+
+void loop() {
+
+  if(buttonA.getSingleDebouncedPress()){
+      if(robotOn) robotOn = false;
+      else robotOn = true;
+      sendReportFlag = true;
+  }
+
+  // Update Sensor Data
+
+  compass.read();
+  
+  // If robot is "on" do stuff
+  if (robotOn) RobotOn();
+  
+  
+}
